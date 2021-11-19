@@ -1,0 +1,122 @@
+! Script zur Berechnung wie viele Jalousien auf/zu sind.
+! 
+! Version 1.2
+!
+! zeigt in Variablen an wie viele Jalousien/Rollos offen, zu oder auf halb stehen.
+! Dabei ist der Typ des Rolladen Aktor egal
+
+! -----------------------------------------------------------------------------------
+! Loggining
+! 
+var LOGGING=false;			! LOGGING="true" / "false" aktivieren / deaktivieren
+var LOGName="Test: ";		! wird for jede Meldung gesetzt um Logs zu Unterscheiden
+var LOGVar="Debug";			! Variable in CCU wo Logs reingeschrieben werden (protokolierung aktivieren)
+
+
+! -----------------------------------------------------------------------------------
+! System Protokoll löschen beim start
+var ClearSystemLog=false;
+
+! -----------------------------------------------------------------------------------
+! Varibalen für die Jalousien
+!
+! diverse Variablen 
+
+var jalousieUPSN="Jalousie auf";		! Variable in der CCU 
+var jalousieDOWNSN="Jalousie zu";		! Variable in der CCU 
+var jalousieHalfeSN="Jalousie halb";	! Variable in der CCU
+
+
+
+! -----------------------------------------------------------------------------------
+! Alle Jalousien
+! Alle Jalousien(Channels) aus Gewerken
+! als Liste="xxx\tyyy\tzzz..."
+! einzeln ="xxx"
+string liste = "Jalousien Status";  ! Gewerke Namen eintragen aus CCU
+
+
+! -----------------------------------------------------------------------------------
+! ab hier nichts verändern !
+! -----------------------------------------------------------------------------------
+
+var jalousieUP=0;		 
+var jalousieDOWN=0;	
+var jalousieHalfe=0;			
+
+! Loggin
+var LOG = dom.GetObject(LOGVar);
+var LOGText="";
+if (ClearSystemLog)
+{
+  ! System Protokoll löschen
+  dom.ClearHistoryData();
+  if (LOGGING==true){LOGText=LOGName+"Clear System Log & start up";LOG.State(LOGText);WriteLine(LOGText);}
+}else
+{
+  if (LOGGING==true){LOGText=LOGName+"Log start up";LOG.State(LOGText);WriteLine(LOGText);}
+}
+
+
+string Gewerk; 
+foreach (Gewerk, liste) 
+{
+	if (LOGGING==true){LOGText=LOGName+"Gruppe: "+Gewerk;LOG.State(LOGText);WriteLine(LOGText);}
+  var GewerkOBJ= dom.GetObject(Gewerk);
+  if (LOGGING==true){LOGText=LOGName+"Anzahl="+GewerkOBJ.Count();LOG.State(LOGText);WriteLine(LOGText);}
+  
+  string DeviceInGroupe;
+  
+	foreach(DeviceInGroupe, GewerkOBJ.EnumIDs())
+    { 
+	  var Device = GewerkOBJ.Get(DeviceInGroupe);
+      if (LOGGING==true){LOGText=LOGName+"Rollo= "+Device.Name();LOG.State(LOGText);WriteLine(LOGText);}
+      
+      !string Datenpunkte=Device.DPs().EnumUsedNames(); 
+      !Write(Datenpunkte);
+      
+      if (Device.DPByHssDP("LEVEL"))
+      {
+        integer IstRolloLevel=Device.DPByHssDP("LEVEL").Value()*100;
+		IstRolloLevel=IstRolloLevel.ToString(0);
+		if (LOGGING==true){LOGText=LOGName+"Level= "+IstRolloLevel;LOG.State(LOGText);WriteLine(LOGText);}
+		
+		! Jalousie ist zu =0
+		if (IstRolloLevel==0)
+		{
+			jalousieDOWN=jalousieDOWN+1;
+			if (LOGGING==true){LOGText=LOGName+"DOWN:Level= "+IstRolloLevel;LOG.State(LOGText);WriteLine(LOGText);}
+		
+		}
+		! Jalousie ist zu =100
+		if (IstRolloLevel==100)
+		{
+			jalousieUP=jalousieUP+1;
+			if (LOGGING==true){LOGText=LOGName+"UP:Level= "+IstRolloLevel;LOG.State(LOGText);WriteLine(LOGText);}
+		}
+		! Jalousie ist halb >0 or <100
+		if ((IstRolloLevel!=0) && (IstRolloLevel!=100))
+		{
+			jalousieHalfe=jalousieHalfe+1;
+			if (LOGGING==true){LOGText=LOGName+"halfe:Level= "+IstRolloLevel;LOG.State(LOGText);WriteLine(LOGText);}
+			
+		}
+      }else{
+			if (LOGGING==true){LOGText=LOGName+"Devicehave no Level= "+Device.Name();LOG.State(LOGText);WriteLine(LOGText);}
+      }
+ 
+     
+    }
+    } 
+    
+	
+dom.GetObject(jalousieUPSN).State(jalousieUP);
+if (LOGGING==true){LOGText=LOGName+"jalousie up: "+jalousieUP;LOG.State(LOGText);WriteLine(LOGText);}
+
+dom.GetObject(jalousieDOWNSN).State(jalousieDOWN);
+if (LOGGING==true){LOGText=LOGName+"jalousie down: "+jalousieDOWN;LOG.State(LOGText);WriteLine(LOGText);}
+
+dom.GetObject(jalousieHalfeSN).State(jalousieHalfe);
+if (LOGGING==true){LOGText=LOGName+"jalousie halfe: "+jalousieHalfe;LOG.State(LOGText);WriteLine(LOGText);}
+
+if (LOGGING==true){LOGText=LOGName+"Script Ende";LOG.State(LOGText);WriteLine(LOGText);}
