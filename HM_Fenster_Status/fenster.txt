@@ -1,0 +1,57 @@
+! Script zur Berechnung wie viele Jalousien auf/zu sind.
+! 
+! Version 0.1 BETA !
+!
+! zeigt in Variablen an wie viele Jalousien/Rollos offen, zu oder auf halb stehen.
+! Dabei ist der Typ des Rolladen Aktor egal
+
+! -----------------------------------------------------------------------------------
+! Loggining
+! 
+var LOGGING=false;			! LOGGING="true" / "false" aktivieren / deaktivieren
+var LOGName="Test: ";		! wird for jede Meldung gesetzt um Logs zu Unterscheiden
+var LOGVar="Debug";			! Variable in CCU wo Logs reingeschrieben werden (protokolierung aktivieren)
+
+
+! -----------------------------------------------------------------------------------
+! System Protokoll löschen beim start
+var ClearSystemLog=false;
+
+! -----------------------------------------------------------------------------------
+! Liste der Gewerke aus der CCU
+! 
+! als Liste="xxx\tyyy\tzzz..."
+! einzeln ="xxx"
+string liste = "Fenster"; 
+
+! -----------------------------------------------------------------------------------
+! ab hier nichts verändern !
+! -----------------------------------------------------------------------------------
+
+string index; 
+string slist ="";
+integer fenster_auf=0;
+integer fenster_zu=0;
+
+foreach (index, liste) {
+object sec = dom.GetObject(""#index#"");
+string itemId;
+
+foreach(itemId, sec.EnumUsedIDs()) {
+ var item = dom.GetObject(itemId);
+ if (item.State() != 0)
+ {
+  fenster_auf=fenster_auf+1; 
+ }
+ else
+ {
+  fenster_zu=fenster_zu+1;
+ }
+}
+}
+if (LOGGING==true){LOGText=LOGName+"Fenster auf: "+fenster_auf;LOG.State(LOGText);WriteLine(LOGText);}
+if (LOGGING==true){LOGText=LOGName+"Fenster zu: "+fenster_zu;LOG.State(LOGText);WriteLine(LOGText);}
+
+dom.GetObject("Fenster auf").State(fenster_auf);
+dom.GetObject("Fenster zu").State(fenster_zu);
+
