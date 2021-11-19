@@ -1,0 +1,228 @@
+! Script zur Steuerung der Heizung
+! Version 1.2
+
+! -----------------------------------------------------------------------------------
+! Loggining
+! 
+var LOGGING=false;			  ! LOGGING="true" / "false" aktivieren / deaktivieren
+var LOGName="Test: ";		! wird for jede Meldung gesetzt um Logs zu Unterscheiden
+var LOGVar="Debug";			! Variable in CCU wo Logs reingeschrieben werden (protokolierung aktivieren)
+
+! -----------------------------------------------------------------------------------
+! Aussen Temperatur Sensor 
+! Beispiel: 
+!			="CUxD.CUX3100001" 
+!			=false wenn nicht verwendet wird
+!
+var TemperaturOutName="CUxD.CUX3100001";
+
+! -----------------------------------------------------------------------------------
+! ab welcher Aussen Temperatur nicht merh geheiz wird
+!
+var SommerAbSN="Sommer ab";		! Variable in der CCU 
+
+! -----------------------------------------------------------------------------------
+! Abesenheit Variable
+string AbwesendTageSN="Abwesend";						    ! Variable in der CCU für tage abwesend Wenn nicht genutzt dann "false"
+string AbwesendTempSN="Abwesend Temperatur";				! Variable in der CCU für Temperatur wenn abwesen. Ueberschreibt SollTemp
+
+! -----------------------------------------------------------------------------------
+! System Protokoll löschen beim start
+var ClearSystemLog=false;
+
+! -----------------------------------------------------------------------------------
+! Status des Heizverhalten
+!
+! diverse Variablen zur Heizug Steuerung
+
+var HeizungWartungSN="Heizung_Wartung";		! Variable in der CCU [normlal / Wartung]
+
+! -----------------------------------------------------------------------------------
+var HeizkoerperSN="Heizkoerper";            ! Variable in der CCU für offene Heizkörper
+var BodenHeizkoerperSN="BodenHeizkoerper";  ! Variable in der CCU für offen Boden Ventile
+
+! -----------------------------------------------------------------------------------
+! Alle Ventile
+! Alle Thermostate(Channels) aus Gewerken
+! als Liste="xxx\tyyy\tzzz..."
+! einzeln ="xxx"
+string liste = "Ventile\tWandthermostate";  ! Gewerke Namen eintragen aus CCU
+
+! -----------------------------------------------------------------------------------
+! Ventiele gelten erst als auf wenn Stellung > VentilMin
+var VentilMin =29;  
+
+! -----------------------------------------------------------------------------------
+! Wand-Thermostat zu Fussbodenheizung
+! 
+! zuordungen von Wandthermostaten zu Fussboden aktoren
+! 
+string AktorList="Gäste Bad:2#BidCos-Wired.JEQ0497783:18\tThermostaht Kind Schalfzimmer:2#BidCos-Wired.JEQ0497783:19\tThermostat Bad:2#BidCos-Wired.JEQ0497783:17\tThermostat Schlafzimmer:2#BidCos-Wired.JEQ0497783:15\tThermostat_Kind_Value#BidCos-Wired.JEQ0497783:13\tThermostat_Wohnzimmer_Value#BidCos-Wired.JEQ0497783:14";
+! -----------------------------------------------------------------------------------
+! ab hier nichts verändern !
+! -----------------------------------------------------------------------------------
+
+! Loggin
+var LOG = dom.GetObject(LOGVar);
+var LOGText="";
+if (ClearSystemLog)
+{
+  ! System Protokoll löschen
+  dom.ClearHistoryData();
+  if (LOGGING==true){LOGText=LOGName+"Clear System Log & start up";LOG.State(LOGText);WriteLine(LOGText);}
+}else
+{
+  if (LOGGING==true){LOGText=LOGName+"Log start up";LOG.State(LOGText);WriteLine(LOGText);}
+}
+
+! Prüfe ob Heizung im WartungsModus
+string WartungModus = dom.GetObject(HeizungWartungSN).State();
+if (WartungModus)
+{
+	if (LOGGING==true){LOGText=LOGName+"Heizung im Wartungs Modus: Ende";LOG.State(LOGText);WriteLine(LOGText);}
+	quit;
+}
+
+! Abesenheit
+! ist abwesendheit nicht "false" hole restliche Tage aus der Variable Abesenheit
+var AbesenheitTage=0;
+if (AbwesendTageSN)
+{
+	AbesenheitTage = dom.GetObject(AbwesendTageSN).State();
+	AbesenheitTage=AbesenheitTage.ToString(0);
+	if (LOGGING==true){LOGText=LOGName+"Abesenheitgesetz: "+AbesenheitTage;LOG.State(LOGText);WriteLine(LOGText);}	
+}
+
+! geöffnete Heizkörper Ventile
+var Heizkoerper=0;
+
+! geöffnete Boden Ventile
+var BodenHeizkoerper=0;
+
+! Aussentemperatur
+if (TemperaturOutName)
+{
+	var AussenTemperatur = dom.GetObject(TemperaturOutName+":1.TEMPERATURE").Value();
+  if (LOGGING==true){LOGText=LOGName+"AussenTemperatur="+AussenTemperatur;LOG.State(LOGText);WriteLine(LOGText);}
+  var SommerAb=dom.GetObject(SommerAbSN).Value();
+	if (LOGGING==true){LOGText=LOGName+"Sommer ab: "+SommerAb;LOG.State(LOGText);WriteLine(LOGText);}
+	if (AussenTemperatur > SommerAb)
+	{
+		if (LOGGING==true){LOGText=LOGName+"Heinzung aus Aussen > "+SommerAb;LOG.State(LOGText);WriteLine(LOGText);}
+		dom.GetObject(HeizkoerperSN).State(0);
+		if (LOGGING==true){LOGText=LOGName+"Heizkoerpere an: 0";LOG.State(LOGText);WriteLine(LOGText);}
+		dom.GetObject(BodenHeizkoerperSN).State(0);
+		if (LOGGING==true){LOGText=LOGName+"BodenHeizkoerper an: 0";LOG.State(LOGText);WriteLine(LOGText);}
+		if (LOGGING==true){LOGText=LOGName+"Script Ende";LOG.State(LOGText);WriteLine(LOGText);}
+		quit;
+	}
+}
+
+string Gewerk; 
+foreach (Gewerk, liste) 
+{
+	if (LOGGING==true){LOGText=LOGName+"-----Gruppe: "+Gewerk;LOG.State(LOGText);WriteLine(LOGText);}
+  var GewerkOBJ= dom.GetObject(Gewerk);
+  if (LOGGING==true){LOGText=LOGName+"Anzahl="+GewerkOBJ.Count();LOG.State(LOGText);WriteLine(LOGText);}
+  
+  string DeviceInGroupe;
+  
+	foreach(DeviceInGroupe, GewerkOBJ.EnumIDs())
+    { 
+	  var Device = GewerkOBJ.Get(DeviceInGroupe);
+      if (LOGGING==true){LOGText=LOGName+"Termostat="+Device.Name();LOG.State(LOGText);WriteLine(LOGText);}
+      
+      string Datenpunkte=Device.DPs().EnumUsedNames(); 
+      !WriteLine(Datenpunkte);
+      
+      ! Ist Ventiel oeffnung
+      
+      var IstVentil=200;
+      
+      ! Keine Virtuellen Gruppen
+      if (Device.DPByHssDP("VALVE_STATE"))
+      {
+        IstVentil=Device.DPByHssDP("VALVE_STATE").Value();
+      }
+      if (LOGGING==true){LOGText=LOGName+"Ventil oeffnung="+IstVentil;LOG.State(LOGText);WriteLine(LOGText);}
+      
+      ! Ist Temperatur
+      var IstTemp=0;
+      IstTemp=Device.DPByHssDP("ACTUAL_TEMPERATURE").Value();
+      if (LOGGING==true){LOGText=LOGName+"Ist Temperatur="+IstTemp;LOG.State(LOGText);WriteLine(LOGText);}
+      
+      ! SollTemperatur
+      
+      var SollTemp=0;
+      if (AbesenheitTage>0)
+	    {
+		    SollTemp=dom.GetObject(AbwesendTempSN).State();
+        if (LOGGING==true){LOGText=LOGName+"Abesenheit ist:"+AbesenheitTage+" setzte Soll auf: "+SollTemp;LOG.State(LOGText);WriteLine(LOGText);}
+	    }else{
+        ! HM Geräte
+        if (Device.DPByHssDP("SET_TEMPERATURE"))
+        {
+          SollTemp=Device.DPByHssDP("SET_TEMPERATURE").Value();
+        }
+        ! HM IP Geräte
+        if (Device.DPByHssDP("SET_POINT_TEMPERATURE"))
+        {
+          SollTemp=Device.DPByHssDP("SET_POINT_TEMPERATURE").Value();
+        }    
+      }    
+      if (LOGGING==true){LOGText=LOGName+"Soll Temperatur="+SollTemp;LOG.State(LOGText);WriteLine(LOGText);}
+	  
+     ! Nur Ventile, keine Wandthermostate
+	   if  ((IstVentil > VentilMin) && (IstVentil<101))
+	   {
+	     if (IstTemp<SollTemp)
+         {  
+			Heizkoerper=Heizkoerper+1;
+			if (LOGGING==true){LOGText=LOGName+"Heizkoerper an";LOG.State(LOGText);WriteLine(LOGText);}
+		 }
+	   }
+     ! Ende Ventile
+     
+     ! Nur Wandtermostate keine Ventile
+		 if  (IstVentil>101)
+     {
+       ! suche zugehörigen Boden Aktor
+       string BodenAktorPair;
+       var BodenAktor=false;
+       foreach (BodenAktorPair,AktorList)
+       {
+         var Thermostat=BodenAktorPair.StrValueByIndex("#", 0);
+         if (Device.Name()==Thermostat)
+         {
+           BodenAktor=BodenAktorPair.StrValueByIndex("#", 1);
+         }
+         
+       }
+       
+       if (BodenAktor)
+       {
+            if (IstTemp<SollTemp)
+            {
+              ! Bodenventil auf
+              dom.GetObject(BodenAktor+".STATE").State(1);
+	            BodenHeizkoerper=BodenHeizkoerper+1;
+              if (LOGGING==true){LOGText=LOGName+"BodenHeizkoerper an: "+BodenAktor;LOG.State(LOGText);WriteLine(LOGText);}
+            }else{
+              ! Bodenventil zu
+              dom.GetObject(BodenAktor+".STATE").State(0);
+              if (LOGGING==true){LOGText=LOGName+"BodenHeizkoerper zu: "+BodenAktor;LOG.State(LOGText);WriteLine(LOGText);}
+            }
+        }else{
+            ! Kein Bodenaktor gefunden
+            if (LOGGING==true){LOGText=LOGName+"Kein Bodenaktor gefunden";LOG.State(LOGText);WriteLine(LOGText);}
+       }
+     ! Ende Wandthermostate
+     
+    }
+    } 
+    }
+dom.GetObject(HeizkoerperSN).State(Heizkoerper);
+if (LOGGING==true){LOGText=LOGName+"Heizkoerpere an:"+Heizkoerper;LOG.State(LOGText);WriteLine(LOGText);}
+dom.GetObject(BodenHeizkoerperSN).State(BodenHeizkoerper);
+if (LOGGING==true){LOGText=LOGName+"BodenHeizkoerper an:"+BodenHeizkoerper;LOG.State(LOGText);WriteLine(LOGText);}
+if (LOGGING==true){LOGText=LOGName+"Script Ende";LOG.State(LOGText);WriteLine(LOGText);}
